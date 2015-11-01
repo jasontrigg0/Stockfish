@@ -394,8 +394,8 @@ void Thread::search(bool isMainThread) {
       for (RootMove& rm : rootMoves)
           rm.previousScore = rm.score;
 
-      // Set the main thread best move to the current BestRootMove if different
-      if (isMainThread && rootDepth <= BestRootDepth)
+      // Set the best move to the current BestRootMove if different
+      if (rootDepth <= BestRootDepth)
       {
           BestMovesLock.acquire();
 
