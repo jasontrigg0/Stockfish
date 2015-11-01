@@ -34,6 +34,20 @@
 #include "search.h"
 #include "thread_win32.h"
 
+class Spinlock {
+
+  std::atomic_int lock;
+
+public:
+  Spinlock() { lock = 1; } // Init here to workaround a bug with MSVC 2013
+  void acquire() {
+      while (lock.fetch_sub(1, std::memory_order_acquire) != 1)
+          while (lock.load(std::memory_order_relaxed) <= 0)
+              std::this_thread::yield(); // Be nice to hyperthreading
+  }
+  void release() { lock.store(1, std::memory_order_release); }
+};
+
 
 /// ThreadBase struct is the base of the hierarchy from where we derive all the
 /// specialized thread classes.
@@ -76,7 +90,6 @@ struct Thread : public ThreadBase {
   Depth rootDepth;
   HistoryStats history;
   MovesStats counterMoves;
-  Depth completedDepth;
 };
 
 
@@ -108,7 +121,7 @@ struct TimerThread : public ThreadBase {
 
 struct ThreadPool : public std::vector<Thread*> {
 
-  void init(); // No constructor and destructor, threads rely on globals that should 
+  void init(); // No constructor and destructor, threads rely on globals that should
   void exit(); // be initialized and valid during the whole thread lifetime.
 
   MainThread* main() { return static_cast<MainThread*>(at(0)); }

@@ -131,6 +131,10 @@ namespace {
   Value DrawValue[COLOR_NB];
   CounterMovesHistoryStats CounterMovesHistory;
 
+  Search::RootMoveVector BestRootMoves;
+  Depth BestRootDepth;
+  Spinlock BestMovesLock;
+
   template <NodeType NT>
   Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool cutNode);
 
@@ -232,6 +236,9 @@ void MainThread::think() {
   DrawValue[ us] = VALUE_DRAW - Value(contempt);
   DrawValue[~us] = VALUE_DRAW + Value(contempt);
 
+  BestRootMoves = rootMoves;
+  BestRootDepth = DEPTH_ZERO;
+
   TB::Hits = 0;
   TB::RootInTB = false;
   TB::UseRule50 = Options["Syzygy50MoveRule"];
@@ -245,9 +252,9 @@ void MainThread::think() {
       TB::ProbeDepth = DEPTH_ZERO;
   }
 
-  if (rootMoves.empty())
+  if (BestRootMoves.empty())
   {
-      rootMoves.push_back(RootMove(MOVE_NONE));
+      BestRootMoves.push_back(RootMove(MOVE_NONE));
       sync_cout << "info depth 0 score "
                 << UCI::value(rootPos.checkers() ? -VALUE_MATE : VALUE_DRAW)
                 << sync_endl;
@@ -329,21 +336,10 @@ void MainThread::think() {
       wait(Signals.stop);
   }
 
-  // Send information from the thread with the deepest completed iteration if the score is better
-  // than main thread score. This makes sure we don't send deeper moves which failed low at root.
-  Thread* bestThread = this;
-  for (Thread* th : Threads)
-      if (   th->completedDepth > bestThread->completedDepth
-          && th->rootMoves[0].score > bestThread->rootMoves[0].score)
-        bestThread = th;
+  sync_cout << "bestmove " << UCI::move(BestRootMoves[0].pv[0], rootPos.is_chess960());
 
-  if (bestThread->rootMoves[0].pv[0] != rootMoves[0].pv[0])
-      sync_cout << UCI::pv(bestThread->rootPos, bestThread->completedDepth, -VALUE_INFINITE, VALUE_INFINITE) << sync_endl;
-
-  sync_cout << "bestmove " << UCI::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
-
-  if (bestThread->rootMoves[0].pv.size() > 1 || bestThread->rootMoves[0].extract_ponder_from_tt(rootPos))
-      std::cout << " ponder " << UCI::move(bestThread->rootMoves[0].pv[1], rootPos.is_chess960());
+  if (BestRootMoves[0].pv.size() > 1 || BestRootMoves[0].extract_ponder_from_tt(rootPos))
+      std::cout << " ponder " << UCI::move(BestRootMoves[0].pv[1], rootPos.is_chess960());
 
   std::cout << sync_endl;
 }
@@ -363,7 +359,6 @@ void Thread::search(bool isMainThread) {
 
   bestValue = delta = alpha = -VALUE_INFINITE;
   beta = VALUE_INFINITE;
-  completedDepth = DEPTH_ZERO;
 
   if (isMainThread)
   {
@@ -398,6 +393,19 @@ void Thread::search(bool isMainThread) {
       // all the move scores except the (new) PV are set to -VALUE_INFINITE.
       for (RootMove& rm : rootMoves)
           rm.previousScore = rm.score;
+
+      // Set the main thread best move to the current BestRootMove if different
+      if (isMainThread && rootDepth <= BestRootDepth)
+      {
+          BestMovesLock.acquire();
+
+          Move bm = BestRootMoves[0].pv[0];
+
+          BestMovesLock.release();
+
+          if (rootMoves[0].pv[0] != bm)
+              std::swap(rootMoves[0], *std::find(rootMoves.begin(), rootMoves.end(), bm));
+      }
 
       // MultiPV loop. We perform a full root search for each PV line
       for (PVIdx = 0; PVIdx < multiPV && !Signals.stop; ++PVIdx)
@@ -484,8 +492,22 @@ void Thread::search(bool isMainThread) {
               sync_cout << UCI::pv(rootPos, rootDepth, alpha, beta) << sync_endl;
       }
 
-      if (!Signals.stop)
-          completedDepth = rootDepth;
+      if (   !Signals.stop
+          && rootDepth > BestRootDepth
+          && rootMoves[0].score > BestRootMoves[0].score)
+      {
+          BestMovesLock.acquire();
+
+          if (   !Signals.stop
+              && rootDepth > BestRootDepth
+              && rootMoves[0].score > BestRootMoves[0].score)
+          {
+              BestRootDepth = rootDepth;
+              BestRootMoves[0] = rootMoves[0]; // FIXME for Multi PV
+          }
+
+          BestMovesLock.release();
+      }
 
       if (!isMainThread)
           continue;
