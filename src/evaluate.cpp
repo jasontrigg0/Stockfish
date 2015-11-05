@@ -22,6 +22,7 @@
 #include <cstring>   // For std::memset
 #include <iomanip>
 #include <sstream>
+#include <iostream>
 
 #include "bitcount.h"
 #include "evaluate.h"
@@ -33,11 +34,13 @@ namespace {
   namespace Trace {
 
     enum Term { // First 8 entries are for PieceType
-      MATERIAL = 8, IMBALANCE, MOBILITY, THREAT, PASSED, SPACE, TOTAL, TERM_NB
+      MATERIAL = 8, IMBALANCE, MOBILITY, THREAT, PASSED, UNSTOPPABLE, SPACE, INITIATIVE, TOTAL, TERM_NB
     };
 
     double scores[TERM_NB][COLOR_NB][PHASE_NB];
-
+    ScaleFactor final_sf;
+    // int game_phase;
+    
     double to_cp(Value v) { return double(v) / PawnValueEg; }
 
     void add(int idx, Color c, Score s) {
@@ -51,7 +54,7 @@ namespace {
 
     std::ostream& operator<<(std::ostream& os, Term t) {
 
-      if (t == MATERIAL || t == IMBALANCE || t == Term(PAWN) || t == TOTAL)
+      if (t == MATERIAL || t == IMBALANCE || t == Term(PAWN) || t == INITIATIVE || t == TOTAL)
           os << "  ---   --- |   ---   --- | ";
       else
           os << std::setw(5) << scores[t][WHITE][MG] << " "
@@ -294,7 +297,7 @@ namespace {
                    | ei.attackedBy[Them][ROOK]);
 
         int mob = popcount<Pt == QUEEN ? Full : Max15>(b & mobilityArea[Us]);
-
+	std::cout << s << " " << mob << "\n";
         mobility[Us] += MobilityBonus[Pt][mob];
 
         if (Pt == BISHOP || Pt == KNIGHT)
@@ -302,7 +305,7 @@ namespace {
             // Bonus for outpost square
             if (   relative_rank(Us, s) >= RANK_4
                 && relative_rank(Us, s) <= RANK_6
-                && !(pos.pieces(Them, PAWN) & pawn_attack_span(Us, s)))
+		   && !(pos.pieces(Them, PAWN) & pawn_attack_span(Us, s)))
                 score += Outpost[Pt == BISHOP][!!(ei.attackedBy[Us][PAWN] & s)];
 
             // Bonus when behind a pawn
@@ -350,7 +353,8 @@ namespace {
 
                 if (   ((file_of(ksq) < FILE_E) == (file_of(s) < file_of(ksq)))
                     && (rank_of(ksq) == rank_of(s) || relative_rank(Us, ksq) == RANK_1)
-                    && !ei.pi->semiopen_side(Us, file_of(ksq), file_of(s) < file_of(ksq)))
+		       && !ei.pi->semiopen_side(Us, file_of(ksq), file_of(s) < file_of(ksq)))
+		    std::cout << "blocked rook" << "\n";
                     score -= (TrappedRook - make_score(mob * 22, 0)) * (1 + !pos.can_castle(Us));
             }
         }
@@ -689,11 +693,10 @@ namespace {
     // the sign of the endgame value, and that we carefully cap the bonus so
     // that the endgame score will never be divided by more than two.
     int value = ((eg > 0) - (eg < 0)) * std::max(initiative, -abs(eg / 2));
-
     return make_score(0, value);
   }
-
 } // namespace
+
 
 
 /// evaluate() is the main evaluation function. It returns a static evaluation
@@ -711,7 +714,6 @@ Value Eval::evaluate(const Position& pos) {
   // in the position object (material + piece square tables).
   // Score is computed from the point of view of white.
   score = pos.psq_score();
-
   // Probe the material hash table
   Material::Entry* me = Material::probe(pos);
   score += me->imbalance();
@@ -720,7 +722,7 @@ Value Eval::evaluate(const Position& pos) {
   // configuration, call it and return.
   if (me->specialized_eval_exists())
       return me->evaluate(pos);
-
+  
   // Probe the pawn hash table
   ei.pi = Pawns::probe(pos);
   score += ei.pi->pawns_score() * Weights[PawnStructure];
@@ -768,7 +770,11 @@ Value Eval::evaluate(const Position& pos) {
           score += int(relative_rank(WHITE, frontmost_sq(WHITE, b))) * Unstoppable;
 
       if ((b = ei.pi->passed_pawns(BLACK)) != 0)
-          score -= int(relative_rank(BLACK, frontmost_sq(BLACK, b))) * Unstoppable;
+	  score -= int(relative_rank(BLACK, frontmost_sq(BLACK, b))) * Unstoppable;
+
+      if (DoTrace) {
+	Trace::add(UNSTOPPABLE, (int(relative_rank(WHITE, frontmost_sq(WHITE, b))) - int(relative_rank(BLACK, frontmost_sq(BLACK, b)))) * Unstoppable);
+      }
   }
 
   // Evaluate space for both sides, only during opening
@@ -776,7 +782,8 @@ Value Eval::evaluate(const Position& pos) {
       score += (evaluate_space<WHITE>(pos, ei) - evaluate_space<BLACK>(pos, ei)) * Weights[Space];
 
   // Evaluate position potential for the winning side
-  score += evaluate_initiative(pos, ei.pi->pawn_asymmetry(), eg_value(score));
+  Score initiative_score = evaluate_initiative(pos, ei.pi->pawn_asymmetry(), eg_value(score));
+  score += initiative_score;
 
   // Scale winning side if position is more drawish than it appears
   Color strongSide = eg_value(score) > VALUE_DRAW ? WHITE : BLACK;
@@ -815,15 +822,18 @@ Value Eval::evaluate(const Position& pos) {
   v /= int(PHASE_MIDGAME);
 
   // In case of tracing add all single evaluation terms
+  // PassedPawns, KingSafety
   if (DoTrace)
   {
+      Trace::final_sf = sf;
       Trace::add(MATERIAL, pos.psq_score());
       Trace::add(IMBALANCE, me->imbalance());
-      Trace::add(PAWN, ei.pi->pawns_score());
+      Trace::add(PAWN, ei.pi->pawns_score() * Weights[PawnStructure]);
       Trace::add(MOBILITY, mobility[WHITE] * Weights[Mobility]
                          , mobility[BLACK] * Weights[Mobility]);
       Trace::add(SPACE, evaluate_space<WHITE>(pos, ei) * Weights[Space]
                       , evaluate_space<BLACK>(pos, ei) * Weights[Space]);
+      Trace::add(INITIATIVE, initiative_score);
       Trace::add(TOTAL, score);
   }
 
@@ -862,12 +872,19 @@ std::string Eval::trace(const Position& pos) {
      << "    King safety | " << Term(KING)
      << "        Threats | " << Term(THREAT)
      << "   Passed pawns | " << Term(PASSED)
+     << "    Unstoppable | " << Term(UNSTOPPABLE)
      << "          Space | " << Term(SPACE)
+     << "     Initiative | " << Term(INITIATIVE)
      << "----------------+-------------+-------------+-------------\n"
      << "          Total | " << Term(TOTAL);
 
-  ss << "\nTotal Evaluation: " << to_cp(v) << " (white side)\n";
-
+  Material::Entry* me = Material::probe(pos);
+  ss << "\nSpecialized evaluation: " << (1 * me->specialized_eval_exists()) << "\n";
+  ss << "Game Phase: " << me->game_phase() / (float) PHASE_MIDGAME << "\n";
+  ss << "Scale Factor: " << Trace::final_sf / (float) SCALE_FACTOR_NORMAL << "\n";
+  float tempo_cp = to_cp(Eval::Tempo);
+  ss << "Tempo: " << (pos.side_to_move() == WHITE ? tempo_cp : -1 * tempo_cp) << "\n";
+  ss << "Total Evaluation: " << to_cp(v) << " (white side)\n";
   return ss.str();
 }
 
