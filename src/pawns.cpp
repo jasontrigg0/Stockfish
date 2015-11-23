@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <iostream>
 
 #include "bitboard.h"
 #include "bitcount.h"
@@ -178,14 +179,18 @@ namespace {
         if (isolated)
             score -= Isolated[opposed][f];
 
-        else if (backward)
-            score -= Backward[opposed];
+        else if (backward) {
+	  std::cout << "Backward pawn: " << mg_value(Backward[opposed]) << "\n";
+	  score -= Backward[opposed];
+	}
 
         else if (!supported)
             score -= UnsupportedPawnPenalty;
 
-        if (connected)
+        if (connected) {
             score += Connected[opposed][!!phalanx][more_than_one(supported)][relative_rank(Us, s)];
+	    std::cout << "Connected pawns: " << mg_value(Connected[opposed][!!phalanx][more_than_one(supported)][relative_rank(Us, s)]) << "\n";
+	}
 
         if (doubled)
             score -= Doubled[f] / distance<Rank>(s, frontmost_sq(Us, doubled));
@@ -271,6 +276,13 @@ Value Entry::shelter_storm(const Position& pos, Square ksq) {
 
       b  = theirPawns & file_bb(f);
       Rank rkThem = b ? relative_rank(Us, frontmost_sq(Them, b)) : RANK_1;
+
+      std::cout << "ShelterWeakness: " <<ShelterWeakness[std::min(f, FILE_H - f)][rkUs] << "\n";
+      std::cout << "StormDanger: " << StormDanger
+	[f == file_of(ksq) && rkThem == relative_rank(Us, ksq) + 1 ? BlockedByKing  :
+	 rkUs   == RANK_1                                          ? NoFriendlyPawn :
+	 rkThem == rkUs + 1                                        ? BlockedByPawn  : Unblocked]
+	[std::min(f, FILE_H - f)][rkThem] << "\n";
 
       safety -=  ShelterWeakness[std::min(f, FILE_H - f)][rkUs]
                + StormDanger
