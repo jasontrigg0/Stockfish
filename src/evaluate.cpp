@@ -355,7 +355,7 @@ namespace {
                 if (   ((file_of(ksq) < FILE_E) == (file_of(s) < file_of(ksq)))
                     && (rank_of(ksq) == rank_of(s) || relative_rank(Us, ksq) == RANK_1)
 		       && !ei.pi->semiopen_side(Us, file_of(ksq), file_of(s) < file_of(ksq))) {
-		    std::cout << "blocked rook" << "\n";
+		  std::cout << "blocked rook: " << mg_value(TrappedRook - make_score(mob * 22, 0)) * (1 + !pos.can_castle(Us)) << "\n";
                     score -= (TrappedRook - make_score(mob * 22, 0)) * (1 + !pos.can_castle(Us));
 		}
             }
@@ -414,11 +414,11 @@ namespace {
 
 	std::cout << "king_safety subscores: " << "\n";
 	std::cout << "kingAttackers count * weight: " << std::min(72, ei.kingAttackersCount[Them] * ei.kingAttackersWeight[Them]) << "\n";
-	std::cout << "kingAdjacentZoneAttacksCount: " <<  9 * ei.kingAdjacentZoneAttacksCount[Them] << "\n";
-	std::cout << "undefended: " <<  27 * popcount<Max15>(undefended) << "\n";
-	std::cout << "pinned: " << 11 * !!ei.pinnedPieces[Us] << "\n";
-	std::cout << "queens: " << - 64 * !pos.count<QUEEN>(Them) << "\n";
-	std::cout << "shelter: " << - mg_value(score) / 8 << "\n";
+	std::cout << "9 * kingAdjacentZoneAttacksCount: " <<  9 * ei.kingAdjacentZoneAttacksCount[Them] << "\n";
+	std::cout << "27 * undefended: " <<  27 * popcount<Max15>(undefended) << "\n";
+	std::cout << "11 * pinned: " << 11 * !!ei.pinnedPieces[Us] << "\n";
+	std::cout << "64 * no_queens: " << - 64 * !pos.count<QUEEN>(Them) << "\n";
+	std::cout << "shelter / 8.0: " << - mg_value(score) / 8 << "\n";
 
         // Analyse the enemy's safe queen contact checks. Firstly, find the
         // undefended squares around the king reachable by the enemy queen...
@@ -440,12 +440,15 @@ namespace {
         b1 = pos.attacks_from<ROOK  >(ksq) & safe;
         b2 = pos.attacks_from<BISHOP>(ksq) & safe;
 
-        // Enemy queen safe checks
+         // Enemy queen safe checks
         b = (b1 | b2) & ei.attackedBy[Them][QUEEN];
         if (b)
         {
-            attackUnits += QueenCheck * popcount<Max15>(b);
-            score -= Checked;
+	  int cnt = popcount<Max15>(b);
+	  std::cout << "Queen checks: " << cnt << "\n";
+	  attackUnits += QueenCheck * cnt;
+	  // attackUnits += QueenCheck * popcount<Max15>(b);
+	  score -= Checked;
         }
 
         // Enemy rooks safe checks
@@ -476,6 +479,7 @@ namespace {
         // array and subtract the score from evaluation.
         score -= KingDanger[std::max(std::min(attackUnits, 399), 0)];
 	std::cout << "king safety attackUnits: " << attackUnits << "\n";
+	std::cout << "king danger lookup: " << mg_value(KingDanger[std::max(std::min(attackUnits, 399), 0)]) << "\n";
     }
 
     if (DoTrace)

@@ -176,27 +176,35 @@ namespace {
             e->passedPawns[Us] |= s;
 
         // Score this pawn
-        if (isolated)
-            score -= Isolated[opposed][f];
-
+	std::cout.precision(2);
+	std::cout << "Pawn score: " << "\n";
+        if (isolated) {
+	  std::cout << "Isolated pawn: " << -1 * (double) mg_value(Isolated[opposed][f]) * 233 / 258. / 256. << "\n";
+	  score -= Isolated[opposed][f];
+	}
         else if (backward) {
-	  std::cout << "Backward pawn: " << mg_value(Backward[opposed]) << "\n";
+	  std::cout << "Backward pawn: " << -1 * (double) mg_value(Backward[opposed]) * 233 / 258. / 256. << "\n";
 	  score -= Backward[opposed];
 	}
-
-        else if (!supported)
-            score -= UnsupportedPawnPenalty;
-
+        else if (!supported) {
+	  std::cout << "Unsupported pawn: " << -1 * (double) mg_value(UnsupportedPawnPenalty) * 233 / 258. / 256. << "\n";
+	  score -= UnsupportedPawnPenalty;
+	}
+	
         if (connected) {
             score += Connected[opposed][!!phalanx][more_than_one(supported)][relative_rank(Us, s)];
-	    std::cout << "Connected pawns: " << mg_value(Connected[opposed][!!phalanx][more_than_one(supported)][relative_rank(Us, s)]) << "\n";
+	    std::cout << "Connected pawns: " << (double) mg_value(Connected[opposed][!!phalanx][more_than_one(supported)][relative_rank(Us, s)]) * 233 / 258. / 256. << "\n";
 	}
 
-        if (doubled)
-            score -= Doubled[f] / distance<Rank>(s, frontmost_sq(Us, doubled));
-
-        if (lever)
-            score += Lever[relative_rank(Us, s)];
+        if (doubled) {
+	  std::cout << "Doubled pawns: " << -1 * (double) mg_value(Doubled[f] / distance<Rank>(s, frontmost_sq(Us, doubled))) * 233 / 258. / 256 << "\n";
+	  score -= Doubled[f] / distance<Rank>(s, frontmost_sq(Us, doubled));
+	}
+	    
+        if (lever) {
+	  std::cout << "Lever pawns: " << (double) mg_value(Lever[relative_rank(Us, s)]) * 233 / 258. / 256 << "\n";
+	  score += Lever[relative_rank(Us, s)];
+	}
     }
 
     b = e->semiopenFiles[Us] ^ 0xFF;
