@@ -714,99 +714,99 @@ Value Eval::evaluate(const Position& pos) {
 
   // Probe the material hash table
   Material::Entry* me = Material::probe(pos);
-  score += me->imbalance();
+  // score += me->imbalance();
 
-  // If we have a specialized evaluation function for the current material
-  // configuration, call it and return.
-  if (me->specialized_eval_exists())
-      return me->evaluate(pos);
+  // // If we have a specialized evaluation function for the current material
+  // // configuration, call it and return.
+  // if (me->specialized_eval_exists())
+  //     return me->evaluate(pos);
 
-  // Probe the pawn hash table
-  ei.pi = Pawns::probe(pos);
-  score += ei.pi->pawns_score() * Weights[PawnStructure];
+  // // Probe the pawn hash table
+  // ei.pi = Pawns::probe(pos);
+  // score += ei.pi->pawns_score() * Weights[PawnStructure];
 
-  // Initialize attack and king safety bitboards
-  ei.attackedBy[WHITE][ALL_PIECES] = ei.attackedBy[BLACK][ALL_PIECES] = 0;
-  init_eval_info<WHITE>(pos, ei);
-  init_eval_info<BLACK>(pos, ei);
+  // // Initialize attack and king safety bitboards
+  // ei.attackedBy[WHITE][ALL_PIECES] = ei.attackedBy[BLACK][ALL_PIECES] = 0;
+  // init_eval_info<WHITE>(pos, ei);
+  // init_eval_info<BLACK>(pos, ei);
 
-  // Pawns blocked or on ranks 2 and 3. Will be excluded from the mobility area
-  Bitboard blockedPawns[] = {
-    pos.pieces(WHITE, PAWN) & (shift_bb<DELTA_S>(pos.pieces()) | Rank2BB | Rank3BB),
-    pos.pieces(BLACK, PAWN) & (shift_bb<DELTA_N>(pos.pieces()) | Rank7BB | Rank6BB)
-  };
+  // // Pawns blocked or on ranks 2 and 3. Will be excluded from the mobility area
+  // Bitboard blockedPawns[] = {
+  //   pos.pieces(WHITE, PAWN) & (shift_bb<DELTA_S>(pos.pieces()) | Rank2BB | Rank3BB),
+  //   pos.pieces(BLACK, PAWN) & (shift_bb<DELTA_N>(pos.pieces()) | Rank7BB | Rank6BB)
+  // };
 
-  // Do not include in mobility squares protected by enemy pawns, or occupied
-  // by our blocked pawns or king.
-  Bitboard mobilityArea[] = {
-    ~(ei.attackedBy[BLACK][PAWN] | blockedPawns[WHITE] | pos.square<KING>(WHITE)),
-    ~(ei.attackedBy[WHITE][PAWN] | blockedPawns[BLACK] | pos.square<KING>(BLACK))
-  };
+  // // Do not include in mobility squares protected by enemy pawns, or occupied
+  // // by our blocked pawns or king.
+  // Bitboard mobilityArea[] = {
+  //   ~(ei.attackedBy[BLACK][PAWN] | blockedPawns[WHITE] | pos.square<KING>(WHITE)),
+  //   ~(ei.attackedBy[WHITE][PAWN] | blockedPawns[BLACK] | pos.square<KING>(BLACK))
+  // };
 
-  // Evaluate pieces and mobility
-  score += evaluate_pieces<KNIGHT, WHITE, DoTrace>(pos, ei, mobility, mobilityArea);
-  score += (mobility[WHITE] - mobility[BLACK]) * Weights[Mobility];
+  // // Evaluate pieces and mobility
+  // score += evaluate_pieces<KNIGHT, WHITE, DoTrace>(pos, ei, mobility, mobilityArea);
+  // score += (mobility[WHITE] - mobility[BLACK]) * Weights[Mobility];
 
-  // Evaluate kings after all other pieces because we need complete attack
-  // information when computing the king safety evaluation.
-  score +=  evaluate_king<WHITE, DoTrace>(pos, ei)
-          - evaluate_king<BLACK, DoTrace>(pos, ei);
+  // // Evaluate kings after all other pieces because we need complete attack
+  // // information when computing the king safety evaluation.
+  // score +=  evaluate_king<WHITE, DoTrace>(pos, ei)
+  //         - evaluate_king<BLACK, DoTrace>(pos, ei);
 
-  // Evaluate tactical threats, we need full attack information including king
-  score +=  evaluate_threats<WHITE, DoTrace>(pos, ei)
-          - evaluate_threats<BLACK, DoTrace>(pos, ei);
+  // // Evaluate tactical threats, we need full attack information including king
+  // score +=  evaluate_threats<WHITE, DoTrace>(pos, ei)
+  //         - evaluate_threats<BLACK, DoTrace>(pos, ei);
 
-  // Evaluate passed pawns, we need full attack information including king
-  score +=  evaluate_passed_pawns<WHITE, DoTrace>(pos, ei)
-          - evaluate_passed_pawns<BLACK, DoTrace>(pos, ei);
+  // // Evaluate passed pawns, we need full attack information including king
+  // score +=  evaluate_passed_pawns<WHITE, DoTrace>(pos, ei)
+  //         - evaluate_passed_pawns<BLACK, DoTrace>(pos, ei);
 
-  // If both sides have only pawns, score for potential unstoppable pawns
-  if (!pos.non_pawn_material(WHITE) && !pos.non_pawn_material(BLACK))
-  {
-      Bitboard b;
-      if ((b = ei.pi->passed_pawns(WHITE)) != 0)
-          score += int(relative_rank(WHITE, frontmost_sq(WHITE, b))) * Unstoppable;
+  // // If both sides have only pawns, score for potential unstoppable pawns
+  // if (!pos.non_pawn_material(WHITE) && !pos.non_pawn_material(BLACK))
+  // {
+  //     Bitboard b;
+  //     if ((b = ei.pi->passed_pawns(WHITE)) != 0)
+  //         score += int(relative_rank(WHITE, frontmost_sq(WHITE, b))) * Unstoppable;
 
-      if ((b = ei.pi->passed_pawns(BLACK)) != 0)
-          score -= int(relative_rank(BLACK, frontmost_sq(BLACK, b))) * Unstoppable;
-  }
+  //     if ((b = ei.pi->passed_pawns(BLACK)) != 0)
+  //         score -= int(relative_rank(BLACK, frontmost_sq(BLACK, b))) * Unstoppable;
+  // }
 
-  // Evaluate space for both sides, only during opening
-  if (pos.non_pawn_material(WHITE) + pos.non_pawn_material(BLACK) >= 12222)
-      score += (evaluate_space<WHITE>(pos, ei) - evaluate_space<BLACK>(pos, ei)) * Weights[Space];
+  // // Evaluate space for both sides, only during opening
+  // if (pos.non_pawn_material(WHITE) + pos.non_pawn_material(BLACK) >= 12222)
+  //     score += (evaluate_space<WHITE>(pos, ei) - evaluate_space<BLACK>(pos, ei)) * Weights[Space];
 
-  // Evaluate position potential for the winning side
-  score += evaluate_initiative(pos, ei.pi->pawn_asymmetry(), eg_value(score));
+  // // Evaluate position potential for the winning side
+  // score += evaluate_initiative(pos, ei.pi->pawn_asymmetry(), eg_value(score));
 
   // Scale winning side if position is more drawish than it appears
   Color strongSide = eg_value(score) > VALUE_DRAW ? WHITE : BLACK;
   ScaleFactor sf = me->scale_factor(pos, strongSide);
 
-  // If we don't already have an unusual scale factor, check for certain
-  // types of endgames, and use a lower scale for those.
-  if (    me->game_phase() < PHASE_MIDGAME
-      && (sf == SCALE_FACTOR_NORMAL || sf == SCALE_FACTOR_ONEPAWN))
-  {
-      if (pos.opposite_bishops())
-      {
-          // Endgame with opposite-colored bishops and no other pieces (ignoring pawns)
-          // is almost a draw, in case of KBP vs KB is even more a draw.
-          if (   pos.non_pawn_material(WHITE) == BishopValueMg
-              && pos.non_pawn_material(BLACK) == BishopValueMg)
-              sf = more_than_one(pos.pieces(PAWN)) ? ScaleFactor(31) : ScaleFactor(9);
+  // // If we don't already have an unusual scale factor, check for certain
+  // // types of endgames, and use a lower scale for those.
+  // if (    me->game_phase() < PHASE_MIDGAME
+  //     && (sf == SCALE_FACTOR_NORMAL || sf == SCALE_FACTOR_ONEPAWN))
+  // {
+  //     if (pos.opposite_bishops())
+  //     {
+  //         // Endgame with opposite-colored bishops and no other pieces (ignoring pawns)
+  //         // is almost a draw, in case of KBP vs KB is even more a draw.
+  //         if (   pos.non_pawn_material(WHITE) == BishopValueMg
+  //             && pos.non_pawn_material(BLACK) == BishopValueMg)
+  //             sf = more_than_one(pos.pieces(PAWN)) ? ScaleFactor(31) : ScaleFactor(9);
 
-          // Endgame with opposite-colored bishops, but also other pieces. Still
-          // a bit drawish, but not as drawish as with only the two bishops.
-          else
-              sf = ScaleFactor(46 * sf / SCALE_FACTOR_NORMAL);
-      }
-      // Endings where weaker side can place his king in front of the opponent's
-      // pawns are drawish.
-      else if (    abs(eg_value(score)) <= BishopValueEg
-               &&  ei.pi->pawn_span(strongSide) <= 1
-               && !pos.pawn_passed(~strongSide, pos.square<KING>(~strongSide)))
-          sf = ei.pi->pawn_span(strongSide) ? ScaleFactor(51) : ScaleFactor(37);
-  }
+  //         // Endgame with opposite-colored bishops, but also other pieces. Still
+  //         // a bit drawish, but not as drawish as with only the two bishops.
+  //         else
+  //             sf = ScaleFactor(46 * sf / SCALE_FACTOR_NORMAL);
+  //     }
+  //     // Endings where weaker side can place his king in front of the opponent's
+  //     // pawns are drawish.
+  //     else if (    abs(eg_value(score)) <= BishopValueEg
+  //              &&  ei.pi->pawn_span(strongSide) <= 1
+  //              && !pos.pawn_passed(~strongSide, pos.square<KING>(~strongSide)))
+  //         sf = ei.pi->pawn_span(strongSide) ? ScaleFactor(51) : ScaleFactor(37);
+  // }
 
   // Interpolate between a middlegame and a (scaled by 'sf') endgame score
   Value v =  mg_value(score) * int(me->game_phase())
