@@ -298,7 +298,7 @@ namespace {
 
         int mob = popcount<Pt == QUEEN ? Full : Max15>(b & mobilityArea[Us]);
 	std::cout.precision(2);
-	std::cout << s << "," << Pt << "," << mob << "," << (double) mg_value(MobilityBonus[Pt][mob]) * 289 / 258. / 256. << "\n";
+        std::cout << s << "," << Pt << "," << mob << ",(" << (double) mg_value(MobilityBonus[Pt][mob]) * 289 / 258. / 256. << "," << (double) eg_value(MobilityBonus[Pt][mob]) * 289 / 258. / 256. << ")" << "\n";
         mobility[Us] += MobilityBonus[Pt][mob];
 
         if (Pt == BISHOP || Pt == KNIGHT)
